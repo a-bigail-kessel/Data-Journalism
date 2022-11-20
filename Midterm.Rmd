@@ -1,0 +1,356 @@
+---
+title: "Midterm"
+author: "Abigail Kessel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+```
+
+## Midterm!!
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+pacman::p_load("tidyverse", "Hmisc", "skimr", "lubridate")
+getwd()
+```
+
+
+
+```{r}
+#SpeedingCops <- rio::import("speeding-cops-data.csv")
+
+SpeedingCops <- read_csv("speeding-cops-data.csv")
+#view(SpeedingCops)
+```
+
+#Data Cleaning/ checking certain things
+
+```{r}
+#was it smart to put these all in one code cell and then comment then out one at a time to run them? it's been done
+summary(SpeedingCops)
+tail(SpeedingCops)
+nrow(SpeedingCops)
+Hmisc::describe(SpeedingCops)
+```
+
+
+##  How many agencies? What was the highest speed? How many cops are going above 90 mph on Florida Highways?
+1. “A three-month Sun Sentinel investigation found almost 800 cops from a dozen agencies driving 90 to 130 mph on our highways.”
+```{r}
+# get number of agencies
+n_distinct(SpeedingCops$agency)
+
+#highest speed
+max(SpeedingCops$mph)
+
+#how many were over 90?
+over90 <-SpeedingCops %>% filter(mph >= 90.0)
+n_distinct(over90$transponder)
+
+#Ryan's answer 
+#SpeedingCops %>% group_by(agency, transponder) %>% count() %>% arrange(desc(n))
+```
+
+Follow up: There are 11 total agencies which is almost a dozen. There are a total of 334 transponders that drove over 90 three times. This could end up equating to 793 individual cops, but it's more likely that there are at least some cops that don't speed. The highest speed is 129.8, which is practically 130 and is shockingly high.
+
+
+
+
+## How many cops were speeding? How many were habitual speeders?
+2. “793 transponders assigned to police agencies from Miami-Dade to Palm Beach counties showed evidence of speeding — and habitual speeding by some officers."
+```{r}
+#how many over 90
+n_distinct(over90$transponder)
+
+#how many habitual speeders -- when I did this as 20 it was 47 officers. I feel like 30 is definitely habitual. 20 isn't super habitual yet.
+over90 %>% 
+  count(transponder) %>%
+  filter(n >= 30) %>%
+  nrow()
+```
+
+Follow up: As before, there are only 334 transponders to correspond with 793 speeding cops. If habitual speeding is defined as speeding over 30 times, 36 police officers are habitual. That's at least some! How they defined habitual is unknown. 
+
+
+
+
+## Out of all police cars, what percent went about 90 mph?
+3. “One out of five police cars hit speeds above 90 mph.”
+```{r}
+Speeders <- n_distinct(over90$transponder)
+Total_Cars <- n_distinct(SpeedingCops$transponder)
+(Speeders/Total_Cars) * 100
+
+#Ryan's answer
+#SpeedingCops <- mutate(above90 = case_when(mph > 90 ~"yes", mph <= 90 ~"no")) %>% tabyl(above90)
+```
+
+Follow-up: I have 100% because every transponder in this data set went above 90 at least three times. If the SpeedingCops dataframe was all cops instead of only the speeders, this code should return around 20%.
+
+
+
+
+## Overall, how many times did cops speed over 13 months?
+4. “Total high-speed incidents: 5,100 in a 13-month period.”
+```{r}
+#how many over 90 incidents 
+nrow(over90)
+```
+
+Follow-up: 4959 is is the general vicinity of 5100 which is a good sign! This dataframe only includes transponders that sped at least three times, so the other 141 incidents unaccounted for are likely one or two time speeders. 
+
+
+## What percent of the speeds were between 90 and 110 mph?
+5. “Most of the high speeds — 96 percent — were between 90 and 110 mph.”
+```{r}
+TotalIncidents <- nrow(over90)
+
+#getting percent 
+over90 %>%
+  filter(mph >= 90.0, mph <= 110.0) %>%
+  nrow() / TotalIncidents * 100
+```
+
+Follow up: Out of all the over90 speeding incidents, 97% of them were in between 90 and 110, which is very close to the original 96%. 
+
+
+
+
+## What percent of the incidents were regular routes?
+6. “More than half of the high-speed incidents involved many of them driving regular routes.”
+```{r}
+over90 %>% 
+  group_by(transponder, agency, from, to) %>% 
+  count %>% 
+  arrange(desc(n))
+```
+
+Follow-up: I can't tell what percent of all incidents were on regular routes, but I can see the prevalence of speeding on certain paths. By group_by()ing to and from we're able to see the most common path by each transponder. There are many incidents on regular routes, with a max of 145 high speed incidents on one route by one officer! Moreover, Miami PD seems to be the highest speeder of regular routes. 
+
+
+
+
+## What percent of Palm Beach County Sheriff's Office transponders went above 90mph?
+7. “Almost 30 percent of the transponders assigned to the Palm Beach County Sheriff's Office showed speeds above 90 mph."
+```{r}
+#there are 26 transponders, each with like over 100-700 cases of speeding over 65 making up a total of 7219 incidents. For speeding over 90, max times is 8 and min is 2
+
+
+#total number of PBSO transponders
+PBSOTotalCarsDF <- SpeedingCops %>% 
+  filter(agency == "PBSO")
+
+#PBSO speeders only
+PBSOSpeedersDF <- over90 %>% 
+  filter(agency == "PBSO")
+
+#getting the percent
+n_distinct(PBSOSpeedersDF$transponder) / n_distinct(PBSOTotalCarsDF$transponder) * 100 
+```
+
+Follow-up:I treated the full SpeedingCops dataframe as all PBSO cops even though it has all the same transponders as over90. The lead to an answer of 100%. If SpeedingCops was all PBSO transponders, this should return about 30%. 
+
+
+
+## What percent of Broward Sheriff's Office transponders went above 90mph? What was the highest?
+8. “At the Broward Sheriff's Office, 18 percent of the transponders registered speeds above 90 and as high as 122 mph, the SunPass analysis found.”
+```{r}
+
+#total number of BSO transponders
+BSOTotalCarsDF <- SpeedingCops %>% 
+  filter(agency == "BSO")
+
+#BSO speeders only
+BSOSpeedersDF <- over90 %>% 
+  filter(agency == "BSO") 
+
+#getting the percent
+n_distinct(BSOSpeedersDF$transponder) / n_distinct(BSOTotalCarsDF$transponder) * 100 
+
+#max BSO speeder
+max(BSOSpeedersDF$mph)
+
+```
+
+Follow up: Originally I count()ed the transponders just to make sure I wasn't missing anything, but this dataset only includes transponders that went above 90, so I will always get 100%. If SpeedingCops was the dataset for all BSO transponders and not just ones who went over 90, this should give about 18%.
+
+
+##What time of day did cops drive fastest?
+9. “Cops drove the fastest from late at night to 6 a.m., when shifts change and traffic is lightest.”
+```{r}
+
+# organizing the incidents by time of day to see how many happened at each time 
+SpeedingCops %>%
+  group_by(start_time) %>%
+  mutate(
+    time_of_day = case_when(
+      hour(start_time) >= 18 ~"evening",
+      hour(start_time) >= 12 ~"afternoon",
+      hour(start_time) >= 6 ~ "morning",
+      hour(start_time) >= 0 ~"night"
+    )
+  ) %>%
+  ungroup() %>%
+  count(time_of_day) %>%
+  arrange(desc(n))
+```
+
+
+```{r}
+#Ryan's answer
+hours <- SpeedingCops %>%
+  group_by(hour=hour(start_time))%>%
+  summarise(max=max(mph), average=mean(mph))%>%
+  arrange(desc(average))
+
+hours
+```
+
+
+Follow-up: This data shows that most speeding incidents occur during the afternoon (noon to 6 pm) and that the least incidents occur during the night (midnight to 6 am). The reported stat had the most high speed incidents at night, which is the exact opposite of my answer. Fastest can be defined in a variety of ways. There's a high likelihood they defined "fastest" as the highest mean or median speed for each time of day. That definition, as represented in the\ second chunk, gives late night to early morning as the "fastest" time.
+
+
+##How many Miami cops drove over 90 mph? How many over 100mph? What was the maximum number of over 100mph incidents by one person?
+10. “Miami officers were among the most chronic speeders, with 143 of them driving over 90 mph the SunPass analysis found. More than 50 Miami cops broke 100 mph — one more than 100 times.
+```{r}
+#Miami over 90
+over90 %>%
+  filter(agency == "Miami PD") %>%
+  count(transponder) %>%
+  nrow()
+
+
+#Miami over 100
+over90 %>%
+  filter(agency == "Miami PD", mph >=100.0) %>%
+  count(transponder) %>%
+  nrow()
+
+```
+
+```{r}
+#Miami biggest repeat offender 
+over90 %>%
+  filter(agency == "Miami PD", mph >=100.0) %>%
+  count(transponder) %>%
+  slice_max(n)
+```
+
+Follow-up: The numbers are slightly off due to the three-time speed incident minimum, but I still have many Miami cops breaking 90 and 100. The highest Miami speeder sped over 100 mph 154 times, which is absolutely insane. The reporters should have said over 150 times for more emphasis.
+
+
+
+
+
+##What was the highest speed of a Miami cop? What time of day was this?
+11. “The Miami cop who drove the fastest on the turnpike hit 125 mph one morning about 4 a.m.” 
+```{r}
+# Miami highest speed
+SpeedingCops %>%
+  filter(agency == "Miami PD") %>%
+  slice_max(mph)
+```
+
+Follow-up: By selecting the whole row, I can see where and when the highest speeding was: on the Turnpike at 3:49 am. 125 mph at four in the morning is very newsworthy.
+
+
+## 12. What was the highest speed? What was the max number of times someone drove over 100?
+12. “The speed leader on the Gratigny Expressway reached 117 mph and drove over 100 mph on 36 days.”
+```{r}
+over90 %>%
+  filter(mph >= 100.0) %>%
+  group_by(transponder)%>%
+  count %>%
+  arrange(desc(n))
+```
+
+
+```{r}
+max(over90$mph)
+```
+
+Follow-up: I can't get the highest speed for the Gratigny expressway, so instead I have the overall highest speed. There is a transponder that went over 100 37 times, but there's no way of telling whether that was the Gratigny Expressway speed leader. The speed leader could also be the cop who drove over 100 mph 154 times or the cop who drove over 100 mph 52 times. 
+
+
+
+
+## At the Miami Beach Police Department, how many officers drove over 90 mph? How many over 100mph?
+13. “At the Miami Beach Police Department, 54 officers drove over 90 mph the analysis found. Many hit speeds over 100 mph.”
+```{r}
+#Miami Beach PD over 90
+over90 %>%
+  filter(agency == "Miami Beach PD") %>%
+  count(transponder) %>%
+  nrow()
+
+#Miami Beach PD over 100
+over90 %>%
+  filter(agency == "Miami Beach PD", mph >= 100.0) %>%
+  count(transponder) %>%
+  nrow()
+```
+
+Follow-up: Only 30 officers hit 90 on three or more occasions. Only about half of the speeders sped often, which is good for the Miami Beach Police Department. 19 doesn't feel like very many, so there must be a lot of over 100 mph one-time offenders. 
+
+
+
+
+
+
+##How many Miami-Dade cops drove over 90 mph? What was the highest speed?
+14. “More than 270 Miami-Dade cops drove over 90 mph and as fast as 115 mph.”
+```{r}
+#Miami Dade over 90
+MiamiDade90 <- over90 %>%
+  filter(agency == "Miami-Dade PD")
+n_distinct(MiamiDade90$transponder)
+
+#Miami Dade highest speed
+max(MiamiDade90$mph)
+```
+
+Follow-up: There were only 84 Miami-Dade cops that drove over 90 mph three times over the 13 month period. That's almost 200 one or two time high speed offenders, which makes the original statistic feel less dramatic. The highest speeder went 115 mph, which is simply an unreasonable speed.
+
+
+
+
+##How fast was the Florida Highway Patrol in comparison to other agencies? What was their highest recorded speed?
+15. “Florida Highway Patrol troopers drove the fastest among the cops examined, at speeds as high as 130 mph, according to the SunPass records.”
+```{r}
+#number of incidents per agency
+over90 %>%
+  group_by(agency) %>%
+  count %>%
+  arrange(desc(n))
+```
+
+```{r}
+#fastest FHP
+FHPmax <- over90 %>%
+  filter(agency == "FHP")
+max(FHPmax$mph)
+```
+
+
+```{r}
+#mean and median speed per agency
+over90 %>%
+  group_by(agency)%>%
+  summarise_at(
+    vars(mph), funs(mean, median)
+  ) %>%
+  arrange(desc(median))
+```
+
+
+
+Follow-up:  I looked into "drive among the fastest" in a variety of ways, and Florida Highway Patrol was never the top speeder, but was often a close runner-up. First I checked the number of high speed incidents, in which Miami PD won out, but FHP was a distant second. Then I organized by the mean and median mph of each agency. FHP is third for mean and fourth for median, which can be considered "among the fastest." The FHP did have the highest overall value of 129.8.
+
+
