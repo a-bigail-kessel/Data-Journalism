@@ -1,0 +1,265 @@
+---
+title: "Midterm2"
+author: "Abigail Kessel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+pacman::p_load("tidyverse", "Hmisc", "skimr", "lubridate", "janitor")
+if (!require("DT")) install.packages('DT')
+xfun::session_info('DT')
+getwd()
+```
+
+
+#Importing and viewing data
+```{r}
+salaries <- read_csv("Salary_Data_Export.csv")
+head(salaries)
+#summary(salaries)
+```
+
+
+#Data Cleaning
+```{r}
+salaries <- clean_names(salaries)
+
+salaries$initial_hire_date<- mdy(salaries$initial_hire_date)
+Today <- Sys.Date()
+```
+
+# Data cleaning part 2 - name reformation
+```{r}
+salaries$last_name <- str_to_title(salaries$last_name)
+salaries$first_name <-str_to_title(salaries$first_name)
+
+head(salaries)
+```
+
+#all of this for a second dataset!
+```{r}
+ncsu <- rio::import("NCSUSalaryDataExport.csv")
+
+ncsu <- clean_names(ncsu)
+
+ncsu$initial_hire_date<- mdy(ncsu$initial_hire_date)
+
+ncsu$last_name <- str_to_title(ncsu$last_name)
+ncsu$first_name <-str_to_title(ncsu$first_name)
+```
+
+
+#binding rows
+```{r}
+two_schools <- list.files(pattern = "*.csv")
+
+two_schools
+
+
+two_schools_purrr <- map_df(two_schools, rio::import)
+head(two_schools_purrr)
+```
+
+
+#1. Who is the oldest employee?
+```{r}
+salaries %>% slice_max(age)
+```
+Professor Philip Bromberg is the oldest employee of UNC! He is 92 year old professor at UNC's school of medicine. He' still kicking! Based on the following chunk, the next oldest are in their 80s - but there's only 16!
+
+
+```{r}
+salaries %>% select(age, last_name) %>%
+  top_n(20, age) %>% arrange(desc(age))
+```
+
+
+#2 What is the average age?
+```{r}
+mean(salaries$age)
+```
+
+45 is prime workforce age, 20 years younger than the retirement age, and about 20 years older than when many grads enter the workforce.
+
+
+
+#3 What is the median salary?
+```{r}
+median(salaries$employee_annual_base_salary)
+mean(salaries$employee_annual_base_salary)
+```
+
+The median is a good statistic because there are many outliers (look how much higher the mean is!). $75k feels like a livable wage.
+
+
+#4 What is the median length of time that each current employee has worked on campus?
+```{r}
+salaries <- salaries %>%
+  mutate(years_worked = time_length(difftime(Today, initial_hire_date), "years")) 
+
+median(salaries$years_worked)
+```
+
+UNC must be consistently hiring new people for a low number like 8, or there's solidly high turnover. Maybe 8 isn't actually that low of a number? To find that out, I'd have to look at other datasets.
+
+
+#5 What month is the most common for employees to start?
+```{r}
+salaries %>%
+  count(month(initial_hire_date))%>%
+  arrange(desc(n))
+
+```
+July is the most popular month to start, which makes sense as the school year begins in August. August as the second most popular furthers that logic.
+
+#5.5 weekday
+```{r}
+salaries %>%
+  count(weekdays(initial_hire_date)) %>%
+  arrange(desc(n))
+
+```
+Monday is the most common hire date by far, as it's the first day of the week. It's normal to start your job at the beginning of the week!
+
+
+#6 What (approximate) age are professors hired at?
+```{r}
+salaries <- salaries %>%
+  mutate(age_at_hire = age - years_worked)
+
+salaries$age_at_hire <- round(salaries$age_at_hire)
+mean(salaries$age_at_hire)
+median(salaries$age_at_hire)
+  
+```
+
+To be a professor you typically need a phD, and people most commonly (after a Google search) get phDs around 30.
+
+
+
+#7 How do the salaries of coaches compare to other employees? 
+```{r}
+coaches <- salaries %>%
+  filter(grepl("Coach|Athletics|Football", job_category)) 
+
+Hmisc::describe(coaches$employee_annual_base_salary)
+```
+
+
+```{r}
+coaches %>%
+  select(job_category, employee_annual_base_salary) %>%
+  arrange(desc(employee_annual_base_salary))
+```
+
+
+```{r}
+not_coaches <- salaries %>%
+  filter(!grepl("Coach|Athletics|Football", job_category))
+
+Hmisc::describe(not_coaches$employee_annual_base_salary)
+median(not_coaches$employee_annual_base_salary)
+```
+
+
+```{r}
+not_coaches %>%  
+  select(job_category, employee_annual_base_salary) %>%
+  arrange(desc(employee_annual_base_salary))
+```
+
+```{r}
+coach_or_nah <- salaries %>%
+  select(employee_annual_base_salary, job_category) %>%
+  mutate(yes_or_no = case_when(
+    grepl("Coach|Athletics|Football", job_category) ~ "yes",
+    !grepl("Coach|Athletics|Football", job_category) ~ "no"
+  ))
+
+ggplot(coach_or_nah, aes(x= employee_annual_base_salary, color= yes_or_no)) +
+  geom_histogram(fill="white", alpha=0.5, position="identity", bins= 50)
+
+# ggplot() +
+#    geom_histogram(coaches, aes(x = employee_annual_base_salary), color = "blue") +
+#    geom_histogram(not_coaches, aes(x = employee_annual_base_salary))
+```
+Coach salaries have a significantly higher mean and the GMD is over double. At every percentile listed, coach salaries are higher. The highest professor salary isn't even in the top 10 coach salaries!
+
+
+
+
+#8 What is the age distribution among professors? (The stereotypical professor is an old man. Are most UNC professors old?)
+```{r}
+professors <- salaries %>% filter(grepl("Professor", job_category))
+
+professors
+```
+
+```{r}
+ggplot(professors,  aes(x= age)) +
+  geom_histogram(fill="#4B9CD3", bins = 20) +
+  labs(
+    title= "UNC Professor Ages",
+    subtitle = "Are Professors Really Old?",
+  )
+ 
+```
+
+Looking at the plot, it's clearly unimodal with most professors around 40 years old. It tapers off close to 80, but it's interesting how many professors work past retirement age. Is it for money? Passion? Who knows. There are a few very young professors. It's interesting how many more professors are about 42-45 than 45-50.
+
+
+#9 As age increases, does salary also increase? I will be looking at not_coaches to avoid skewing from the coach data
+```{r}
+not <- not_coaches %>% 
+  group_by(age) %>%
+  summarise(
+    mean_salary = mean(employee_annual_base_salary)
+  ) %>% arrange(desc(mean_salary))
+
+not
+```
+
+```{r}
+ggplot(not, aes(x=age, y=mean_salary)) + geom_point() + xlab("Age") + ylab("Mean Salary") + labs(title = "Mean Salary per Age")
+```
+There appears to be a positive non-linear correlation (not causation! I'm in a stats class) between age and salary. From 20 to 40, there is a clear salary increase. 40 to 60 has a plateau. I'm assuming that people get promoted often when they're young and promoted less in their mid to late career. The people who stay on a long time get the fancy titles, and the big money.
+
+
+```{r}
+ggsave("salary_per_age_plot.png", device = "png")
+```
+
+
+
+#10. What UNC jobs get paid the least?
+
+```{r}
+housekeepers <- salaries %>%
+select(job_category, employee_annual_base_salary, age) %>%
+group_by(job_category) %>%
+  summarise(
+    mean_salary = round(mean(employee_annual_base_salary)),
+    mean_age = round(mean(age))
+  ) %>%
+  arrange(-desc(mean_salary))
+
+housekeepers
+```
+#I've seen recent protests for better pay for housekeepers, and they have the second lowest mean salary. It can be too easy to forget about all the people working for very little who make UNC function. The mean age is people who are mid career, and likely have limited mobility. The living wage for Chapel Hill/Durham is $17 an hour with no children and around $30 an hour with 1 child. The housekeeper salary is simply not a living wage. https://livingwage.mit.edu/metros/20500
+
+
+```{r}
+DT::datatable(housekeepers)
+```
+
+
+
+
+
