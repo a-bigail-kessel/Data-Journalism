@@ -1,0 +1,558 @@
+---
+title: "Campaign Finance Final"
+author: "Abigail Kessel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+getwd()
+pacman::p_load("tidyverse","Hmisc", "skimr", "lubridate", "janitor")
+```
+
+#Import and View Data for Morgan Expenditures
+```{r}
+#read csv
+mexp <- read_csv("Morgan_Expenditures.csv")
+
+#make first row column names
+mexp <- mexp %>%  row_to_names(row_number = 1)
+#clean names
+mexp <- clean_names(mexp)
+
+
+#make things that need to be numeric numeric
+mexp$amount1 <- as.numeric(mexp$amount1)
+mexp$sum_to_date <- as.numeric(mexp$sum_to_date)
+
+#how i originally removed nas -- solid idea good to have around
+#mexp = subset(morgan_expenditures, select = -c(amount, office_sought, declaration, candidate ) )
+
+#remove NAs
+mexp <- mexp[,colSums(is.na(mexp))<nrow(mexp)]
+
+#rename account1 to account. so annoying
+mexp <- mexp %>% 
+       rename("amount" = "amount1")
+
+head(mexp)
+```
+
+#morgan donations
+```{r}
+mdon <- read_csv("Morgan_Donations.csv")
+#make first row column names
+mdon <- mdon %>%  row_to_names(row_number = 1)
+
+#clean names
+mdon <- clean_names(mdon)
+
+#get numeric values to be numeric
+mdon$sum_to_date <- as.numeric(mdon$sum_to_date)
+mdon$amount <- as.numeric(mdon$amount)
+
+#removes all columns that have all na values. from stack overflow https://stackoverflow.com/questions/2643939/remove-columns-from-dataframe-where-all-values-are-na
+mdon <- mdon[,colSums(is.na(mdon))<nrow(mdon)]
+
+mdon$full_zip <- str_sub(mdon$full_zip,1, 5)
+
+tail(mdon)
+```
+
+#import and view Lee donation data
+```{r}
+ldon <- read_csv("Lee_Donations.csv")
+
+#make first row column names
+ldon <- ldon %>%  row_to_names(row_number = 1)
+#clean names
+ldon <- clean_names(ldon)
+
+#remove NA
+ldon <- ldon[,colSums(is.na(ldon))<nrow(ldon)]
+
+#make numeric the money ones
+ldon$sum_to_date <- as.numeric(ldon$sum_to_date)
+ldon$amount <- as.numeric(ldon$amount)
+
+#ldon$name <- replace_ame()
+
+head(ldon)
+```
+
+
+#Import and View Lee Expenditures Data
+```{r}
+#read in csv
+lexp <- read_csv("Lee_Expenditures.csv")
+
+#make first row column names
+lexp <- lexp %>%  row_to_names(row_number = 1)
+#clean names
+lexp <- clean_names(lexp)
+
+
+#make things that need to be numeric numeric
+lexp$amount1 <- as.numeric(lexp$amount1)
+lexp$sum_to_date <- as.numeric(lexp$sum_to_date)
+
+#remove NAs
+lexp <- lexp[,colSums(is.na(lexp))<nrow(lexp)]
+
+#rename account1 to account
+lexp <- lexp %>%
+       rename("amount" = "amount1")
+
+
+head(lexp)
+```
+
+
+#Now that I've done 100 lines of just opening the csv -- let's get into the actual analysis!
+
+#Donations Questions
+
+1. How much total money for each campaign?
+```{r}
+ltotal <- sum(ldon$amount)
+mtotal <- sum(mdon$amount)
+
+ltotal
+mtotal
+
+mtotal - ltotal
+```
+
+2.Summary Lee Donations
+```{r}
+summary(ldon$amount)
+#interesting how lee donations are rounded off and morgan donations include the cents 
+```
+
+2.5 Summary Morgan Donations
+```{r}
+summary(mdon$amount)
+```
+
+#Analysis Thus Far
+
+Morgan raised more money than Lee by 227,275. Both raised over a million dollars -- makes me wonder if this was a particularly high. The min donation for Lee is 15, while for Morgan it's 1. Lee's median donation is $1000 - which is way higher than Morgan's at 25. Both have mean donations way higher than the mean, which signals that there are a few huge donations as outliers.
+
+Questions Raised:
+How many donations per candidate?
+Is this typical?
+Most common donors
+
+3. How many donations each?
+```{r}
+nrow_ldon <- nrow(ldon)
+nrow_mdon <- nrow(mdon)
+
+
+nrow_ldon
+nrow_mdon
+nrow_mdon/nrow_ldon
+```
+
+7.6 times more donations to Morgan!!
+
+
+4. Repeat Donors Lee
+```{r}
+lee_repeats <- ldon %>% group_by(name) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Total))
+  
+lee_repeats
+
+#8 people donated twice, 2 donated 3 times 
+```
+
+4.5 Repeat Donors Morgan
+```{r}
+#mdon %>% count(mdon$name) %>% arrange(desc(n))
+
+morgan_repeats <- mdon %>%
+  group_by(name) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Total))
+  
+  
+morgan_repeats
+
+
+```
+
+5. How much non-party money?
+```{r}
+l_nonparty <- ltotal - 1000405.84	
+l_nonparty
+# a from non party!
+
+m_nonparty <- mtotal - 1315490.33	
+
+m_nonparty
+#250844 from non party!
+
+l_nonparty - m_nonparty
+```
+
+Lee got 338k in donations, while Morgan got 250k
+
+6. Who else is donating then? Lee
+```{r}
+lcontributions <- ldon %>% group_by(receipt_type_desc) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) 
+  
+lcontributions
+```
+
+6.5 Morgan
+```{r}
+mcontributions <- mdon %>% group_by(receipt_type_desc) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) 
+  
+mcontributions
+```
+
+
+#chart
+```{r}
+receipts<- c("Individual Contribution","Other Political Committee Contribution", "Party Contribution")
+Lee <- c(225209.57, 107822.00, 1006005.84)
+Morgan <- c(201347.74, 48674.13,1316240.33	)
+
+df1 <- data.frame(Lee, Morgan, receipts)
+df2 <- tidyr::pivot_longer(df1, cols=c('Lee', 'Morgan'), names_to='Candidate', 
+values_to="value")
+head(df2)
+
+ggplot(df2, aes(x=receipts, y=value, fill=Candidate)) +
+  expand_limits( y=c(0,1500000)) +
+    geom_bar(stat='identity', position='dodge') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 10, vjust = 1, hjust = 1)) +
+ labs(
+    title= "Campaign Donations Categorized by Receipt Description",
+    x="Receipt Type",
+    y="Amount in Dollars",
+    )
+
+```
+
+
+
+#Analysis Now:
+
+Morgan had more party money by 300k, but 50k less PAC money. She had almost 8 times as many individual donations, yet had less individual donation money overall by almost 25k. Lee got 338k in donations, while Morgan got 250k. Morgan also has a bunch more repeat donors. Almost no one donates to Lee twice, but that's probably because they give big money upfront. 
+
+7. What PACS are donating?
+```{r}
+ldon %>% filter(receipt_type_desc == "Other Political Committee Contribution")
+```
+This gives me strong incumbents vibes. He's got the support of a lot of different professional groups.
+
+6.5 Morgan PACS
+
+```{r}
+mdon %>% filter(receipt_type_desc == "Other Political Committee Contribution")
+```
+
+7. What zipcode donated the most? How much money for each zipcode?
+```{r}
+ldon_zips <- ldon %>% group_by(full_zip) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+  
+ldon_zips <- na.omit(ldon_zips)
+
+ldon_zips
+```
+
+
+Morgan Zip Codes
+```{r}
+mdon_zips <- mdon %>% 
+  group_by(full_zip) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>%arrange(desc(Amount))
+
+mdon_zips <- na.omit(mdon_zips)
+
+mdon_zips
+```
+
+#district 7 zip codes
+```{r}
+d7_zipcodes<- 
+c(28403,
+28412,
+28411,
+28409,
+28405,
+28401,
+28428,
+28429,
+28480,
+28449,
+28402,
+28404,
+28407,
+28406,
+28408,
+28410)
+```
+
+How Morgan much money came from the district itself?
+```{r}
+mdon_district_zips <- mdon_zips %>% filter(full_zip %in% d7_zipcodes) 
+
+mdistrictmoney<- sum(mdon_district_zips$Amount)
+mdistrictmoney
+
+mdistrictmoney/m_nonparty * 100
+```
+
+How much money isn't from the district
+```{r}
+m_nonparty - mdistrictmoney
+(m_nonparty - mdistrictmoney)/m_nonparty * 100
+```
+
+
+How much Lee Money came from the district itself?
+```{r}
+ldon_district_zips <- ldon_zips %>% filter(full_zip %in% d7_zipcodes) 
+
+ldistrictmoney<- sum(ldon_district_zips$Amount)
+ldistrictmoney
+
+ldistrictmoney/l_nonparty * 100
+
+```
+
+From outside the district?
+```{r}
+l_nonparty - ldistrictmoney
+(l_nonparty - ldistrictmoney)/l_nonparty * 100
+```
+
+
+#Chart 1 -- Making a map of Donors for Morgan
+```{r}
+#most of the map stuff is from this website https://rpubs.com/richmajerus/508643
+
+library(leaflet)
+
+library(tigris)
+
+zipcodes <- zctas(cb = TRUE, starts_with = c("27", "28"))
+
+zipcodes
+
+char_zips <- geo_join(zipcodes,
+                      mdon_zips,
+                      by_sp = "GEOID20",
+                      by_df = "full_zip",
+               how = "left")
+
+pal <- colorNumeric( palette = "Greens",
+  domain = char_zips$Amount)
+
+
+labels <- 
+  paste0(
+    "Zip Code: ",
+    char_zips$GEOID20, "<br/>",
+    "Amount: ",
+    scales::dollar(char_zips$Amount)) %>%
+  lapply(htmltools::HTML)
+
+```
+
+
+```{r}
+
+char_zips <- sf::st_transform(char_zips, crs = 4326)
+
+mdonations_map <- leaflet(char_zips) %>% 
+  # add base map
+  addProviderTiles("CartoDB") %>% 
+  setView(-79.055847, 35.913200, zoom = 7) %>% 
+  # add zip codes
+  addPolygons(fillColor = ~pal(Amount),
+weight = 1,
+opacity = 1,
+color = "white",
+fillOpacity = 0.7,
+highlight = highlightOptions(weight = 2,
+                             color = "#666",
+                             fillOpacity = 0.7,
+                             bringToFront = TRUE), 
+label = labels) %>%
+addLegend(pal = pal,
+          values = ~Amount,
+          opacity = 0.7,
+          title = htmltools::HTML("Amount Donated per Zip Code"),
+          position = "bottomright")
+
+
+mdonations_map
+```
+
+
+
+
+#Making a map for lee donations
+```{r}
+lee_char_zips <- geo_join(zipcodes,
+                      ldon_zips,
+                      by_sp = "GEOID20",
+                      by_df = "full_zip",
+               how = "left")
+
+pal2 <- colorNumeric( palette = "Greens",
+  domain = lee_char_zips$Amount)
+
+
+labels2 <- 
+  paste0(
+    "Zip Code: ",
+    char_zips$GEOID20, "<br/>",
+    "Amount: ",
+    scales::dollar(lee_char_zips$Amount)) %>%
+  lapply(htmltools::HTML)
+```
+
+```{r}
+lee_char_zips <- sf::st_transform(lee_char_zips, crs = 4326)
+
+ldonations_map <- leaflet(lee_char_zips) %>% 
+  # add base map
+  addProviderTiles("CartoDB") %>% 
+  setView(-79.055847, 35.913200, zoom = 7) %>% 
+  # add zip codes
+  addPolygons(fillColor = ~pal2(Amount),
+weight = 1,
+opacity = 1,
+color = "white",
+fillOpacity = 0.7,
+highlight = highlightOptions(weight = 2,
+                             color = "#666",
+                             fillOpacity = 0.7,
+                             bringToFront = TRUE), 
+label = labels2) %>%
+addLegend(pal = pal2,
+          values = ~Amount,
+          opacity = 0.7,
+          title = htmltools::HTML("Amount Donated per Zip Code"),
+          position = "bottomright")
+
+
+ldonations_map
+```
+
+
+
+
+#Pivoting to Expenditures 
+
+#i didn't end up using any of this but i thought i could catch them doing some sneaky stuff. they didnt. just spent a shit ton on marketing
+
+1. How much money did each campaign spend?
+```{r}
+sum(lexp$amount)
+sum(mexp$amount)
+```
+
+Morgan spent about 13k more than Lee. She had more money after all
+
+2. What was that money spent on?
+```{r}
+lpurposes <- lexp %>% group_by(purpose) %>%
+  summarise(
+    #Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+
+lpurposes 
+```
+You can just NA your operating expenses? what the heck!!! -- after further research he gave everything a purpose code so I guess that's ok??
+
+
+2.5 Who exactly is Lee giving money to?
+```{r}
+lexp %>% group_by(name) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+```
+
+Checking to see what NA purpose purchases Lee is making
+```{r}
+lexp %>% filter(is.na(purpose))
+```
+"E	Electioneering communication	Groups (other than PACs) making electioneering communications"
+
+
+Every purchase has a Purpose Type Code, so I guess that balances out 
+```{r}
+lexp %>% group_by(purpose_type_code) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+```
+3. Morgan Expenditures Purpose
+```{r}
+mexp %>% group_by(purpose) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+```
+
+```{r}
+mexp %>% group_by(name) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+```
+
+
+Morgan has no NA purposes, but has NA purpose codes. I guess both parties dont want to fill out forms 
+```{r}
+mexp %>% group_by(purpose_type_code) %>%
+  summarise(
+    Total = n(),
+    Amount = sum(amount)
+  ) %>% arrange(desc(Amount))
+```
+
+
+
+
+
+
+
